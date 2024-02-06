@@ -4,17 +4,12 @@ import {widthPercentageToDP as wp, heightPercentageToDP as hp} from 'react-nativ
 import Features from '../components/features';
 import {dummyMessages} from "../constants/index.js"
 import Voice from '@react-native-community/voice';
-import { LogBox } from 'react-native';
-LogBox.ignoreLogs(['new NativeEventEmitter']); 
-LogBox.ignoreAllLogs();
 
 
 export default function HomeScreen () {
   const [messages,setMessages] = useState(dummyMessages)
   const [recording,setRecording] = useState(false)
   const [speaking, setSpeaking] = useState(false)
-
-  const log = logger.createLogger();
 
   const clear = () =>{
     setMessages([]);
@@ -24,18 +19,18 @@ export default function HomeScreen () {
     setSpeaking(false);
   }
 
-  const speechStartHandler = e =>{
+  const speechStartHandler = (e) =>{
     console.log("Speech Start Handler");
   }
-  const speechEndHandler = e =>{
+  const speechEndHandler = (e) =>{
     setRecording(false)
     console.log("Speech End Handler");
   }
-  const speechResultsHandler = e =>{
-    console.log("Voice input: ",e);
+  const speechResultsHandler = (e) =>{
+    console.log("Voice event: ",e.value);
   }
-  const speechErrorHandler = e =>{
-    console.log("Error: ",e);
+  const speechErrorHandler = (e) =>{
+    console.log("speech error handler: ",e);
   }
 
   const startRecording = async() =>{
@@ -63,7 +58,7 @@ export default function HomeScreen () {
     Voice.onSpeechError = speechErrorHandler;
 
     return ()=>{
-      Voice.destroy.then(Voice.removeAllListeners);
+      Voice.destroy().then(Voice.removeAllListeners);
     }
   },[])
 
