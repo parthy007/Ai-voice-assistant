@@ -1,21 +1,67 @@
-import React, { useEffect, useState } from 'react'
-import { View, Text, SafeAreaView, Image, ScrollView, TouchableOpacity } from 'react-native'
+import React, { useEffect, useRef, useState } from 'react'
+import { View, Text, SafeAreaView, Image, ScrollView, TouchableOpacity, Alert } from 'react-native'
 import {widthPercentageToDP as wp, heightPercentageToDP as hp} from 'react-native-responsive-screen';
 import Features from '../components/features';
-import {dummyMessages} from "../constants/index.js"
 import Voice from '@react-native-community/voice';
+import { apiCall } from '../api/openAI.js';
+import Tts from 'react-native-tts';
 
 
 export default function HomeScreen () {
-  const [messages,setMessages] = useState(dummyMessages)
+  const [messages,setMessages] = useState([])
   const [recording,setRecording] = useState(false)
   const [speaking, setSpeaking] = useState(false)
+  const [result, setResult] = useState('')
+  const [loading, setLoading] = useState(false)
+  const scrollViewRef = useRef();
+
+  useEffect(() => {
+    if (result.trim().length > 0) {
+      const newMessages = [...messages];
+      newMessages.push({ role: 'user', content: result.trim() });
+      setMessages(newMessages);
+      setLoading(true);
+      updateScrollView();
+      apiCall(result.trim(), newMessages).then(res => {
+        if(res.success){
+          setMessages([...res.data]);
+          setLoading(false);
+          updateScrollView();
+          setResult('');
+          startTextToSpeech(res.data[res.data.length-1]);
+        }else{
+          Alert.alert("Error: ",res.msg);
+        }
+      });
+    }
+  }, [result]); 
+
+  const startTextToSpeech = (message) =>{
+    if(!message.content.includes('https')){
+      setSpeaking(true);
+      Tts.speak(message.content, {
+        androidParams: {
+          KEY_PARAM_PAN: -1,
+          KEY_PARAM_VOLUME: 0.5,
+          KEY_PARAM_STREAM: 'STREAM_MUSIC',
+        },
+      });
+    }
+  }
+
+  const updateScrollView = () =>{
+    setTimeout(() => {
+      scrollViewRef?.current?.scrollToEnd({animated: true})
+    }, 200);
+  }
 
   const clear = () =>{
     setMessages([]);
+    Tts.stop();
   }
 
   const stopSpeaking = () =>{
+    Tts.stop();
     setSpeaking(false);
   }
 
@@ -27,7 +73,9 @@ export default function HomeScreen () {
     console.log("Speech End Handler");
   }
   const speechResultsHandler = (e) =>{
-    console.log("Voice event: ",e.value);
+    console.log("Voice event: ",e);
+    const text = e.value[0];
+    setResult(text);
   }
   const speechErrorHandler = (e) =>{
     console.log("speech error handler: ",e);
@@ -35,6 +83,7 @@ export default function HomeScreen () {
 
   const startRecording = async() =>{
     setRecording(true);
+    Tts.stop();
     try{
       await Voice.start('en-GB')
     }catch(err){
@@ -45,7 +94,6 @@ export default function HomeScreen () {
     try{
       await Voice.stop()
       setRecording(false)
-      //fetch result from gpt
     }catch(err){
       console.log("Error while stopping, ", err)
     }
@@ -57,11 +105,17 @@ export default function HomeScreen () {
     Voice.onSpeechResults = speechResultsHandler;
     Voice.onSpeechError = speechErrorHandler;
 
+    //tts event listners
+    Tts.addEventListener('tts-start', (event) => console.log("start", event));
+    Tts.addEventListener('tts-progress', (event) => console.log("progress", event));
+    Tts.addEventListener('tts-finish', (event) => console.log("finish", event));
+    Tts.addEventListener('tts-cancel', (event) => console.log("cancel", event));
+
     return ()=>{
       Voice.destroy().then(Voice.removeAllListeners);
     }
   },[])
-
+  
   return (
     <View className="flex-1 bg-white">
       <SafeAreaView className="flex-1 flex mx-5">
@@ -76,7 +130,7 @@ export default function HomeScreen () {
               Assistant
             </Text>
             <View style={{height:hp(58)}} className="bg-neutral-200 rounded-3xl p-4">
-              <ScrollView className="space-y-4">
+              <ScrollView className="space-y-4" ref={scrollViewRef}>
                 {messages.map((message,index)=>{
                   if(message.role==="assistant"){
                     if(message.content.includes("https")){
@@ -123,22 +177,30 @@ export default function HomeScreen () {
           <Features/>
         )}
         <View className="flex-row justify-center items-center">
-          {recording?(
-            <TouchableOpacity onPress={stopRecording}>
-              <Image 
-                source={require("../assests/voiceLoading.gif")}
-                className="rounded-full"
-                style={{width:hp(10),height:hp(10)}}
-              />
-            </TouchableOpacity>
+          {loading ? (
+            <Image 
+              source={require("../assests/loading.gif")}
+              style={{width:hp(10),height:hp(10)}}
+            />
           ):(
-            <TouchableOpacity onPress={startRecording}>
-              <Image 
-                source={require("../assests/recordingIcon.png")}
-                className="rounded-full"
-                style={{width:hp(10),height:hp(10)}}
-              />
-            </TouchableOpacity>
+
+            recording ? (
+              <TouchableOpacity onPress={stopRecording}>
+                <Image 
+                  source={require("../assests/voiceLoading.gif")}
+                  className="rounded-full"
+                  style={{width:hp(10),height:hp(10)}}
+                />
+              </TouchableOpacity>
+            ):(
+              <TouchableOpacity onPress={startRecording}>
+                <Image 
+                  source={require("../assests/recordingIcon.png")}
+                  className="rounded-full"
+                  style={{width:hp(10),height:hp(10)}}
+                />
+              </TouchableOpacity>
+            )
           )}
 
           {speaking && messages.length>0 && (
